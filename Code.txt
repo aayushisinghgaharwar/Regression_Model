@@ -1,0 +1,375 @@
+---
+title: "report"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+## package we will use in this package
+
+library(leaps) # for regsubsets function
+library(pastecs) # for descriptive statistics
+library(ggplot2)
+library(corrplot) ## to plot correlation matrix
+library(ISLR)## for the data "auto"
+library(car) ## lineraHypothesis function and vif function
+library(lmtest)## bp test
+library(grid) ## to combine many plots in one two third
+```
+
+
+# 1) Introduction:
+
+In this report , we will try to detect variables that can determine the acceleration of a vehicule, 
+in our life we notice that many factors can influence the acceleration of a vehicule, fore example the consumption per mile of diesel or essence of the vehicule, number of horsepower inside the moteur of the vehicule, brand of the vehicule and number of years that the vehicule had being used.
+
+To know more about determinants of the acceleration, we use a data that gather informations about some 392 vehicules from different brand types.
+
+In a first part, we will discover the variables (we will do both statistical and graphical exploration).
+
+In a second part we will start building our model by including all the variables , and then making a selection of the best that explain the best acceleration, the selection of variables will be based on testing hypothesis and on comparing the full and the reduced model using anova method.
+
+after model selection we will discuss the effect of those selected variables on the acceleration and finnaly we will verify hypothesis related to the model we build, to verify if the model is strong enough.
+
+
+# 2) Data preparation and description:
+
+## 2.1) Data preparation:
+
+
+```{r}
+bd = Auto
+dim(bd) ## dimension of the data set
+```
+
+The data set is composed of 392 rows and 9 variables, those variable are :
+
+```{r}
+names(bd) ## names of attributes
+```
+
+*mpg* : is Miles per gallon
+*cylinders* : Number of cylinders inside the vehicles
+*displacment* : Engine displacement
+*horsepower* : Engine horsepower
+*weight* : Weight of the vehicle
+*acceleration* : Time to accelerate from 0 to 60 mile per hour
+*year* : Model year
+*origin* : Vehicle origin 
+*name* : The name of the vehicle
+
+let's now check types of those variables :
+
+```{r}
+str(bd) ## type of the variables
+```
+
+
+
+we should notice that the variable **name** should be removed and the variable origin should be transform to factor type.
+
+```{r}
+bd$origin= as.factor(bd$origin)
+bd = bd[1:8]
+```
+
+
+## 2.2) Data description:
+
+By doing those transformations, we give a statistical description about our variables, 
+
+```{r}
+stat.desc(bd[1:7]) ## stat descriptive of variables
+```
+
+We can notice that there is no missing value in all continuous variables, the table above give a summary about many statistic like the mean and median, the max and the mean, the variation and coefficient of variation for each continuous variables.
+
+regarding the categorical variable, we present the frequence of each modality.
+
+```{r}
+table(bd$origin)/length(bd$origin)
+```
+
+1 : american
+2 : european
+3: Japanese
+
+we notice that 62.5% of vehicules are from USA, 17.3% are from UE and the rest of vehicules are from Japan.
+
+### i) correlation between variables:
+
+```{r}
+corrplot.mixed(cor(bd[1:7]))
+```
+
+We are intereseted in a first stage about correlation between acceleration and other variables, we notice that there is a negative correlation between acceleration and horsepower, deplacement , cylinders that exceed 0.5 , the correlation between acceleration and other varibales does nto exceed 0.5 .
+
+### ii) Graphics of the dependant variable VS independant variables:
+
+We will now present some graphs where Y axis represent the acceleration variable and the X axis will vary for each of the independant variable.
+
+#### Plot 1:
+
+```{r}
+p1 = ggplot()+geom_point(aes(x=year , y = acceleration), data= bd)
+p2 = ggplot()+geom_point(aes(x=weight , y = acceleration), data= bd)
+
+grid.newpage()
+vplayout = function(x,y)
+viewport(layout.pos.row = x, layout.pos.col = y)
+pushViewport(viewport(layout = grid.layout(1,2)))
+print(p1, vp = vplayout(1, 1))
+print(p2, vp = vplayout(1, 2))
+
+
+```
+
+We can notice that acceleration does not vary much within year, but considering weight, we can see that the more vehicule is heavy the more acceleration is low.
+
+#### Plot 2:
+
+```{r}
+p1 = ggplot()+geom_point(aes(x=horsepower , y = acceleration), data= bd)
+p2 = ggplot()+geom_point(aes(x=displacement , y = acceleration), data= bd)
+grid.newpage()
+vplayout = function(x,y)
+viewport(layout.pos.row = x, layout.pos.col = y)
+pushViewport(viewport(layout = grid.layout(1,2)))
+print(p1, vp = vplayout(1, 1))
+print(p2, vp = vplayout(1, 2))
+```
+
+From those two plots, we notice that by increasing displacment or horsepower acceleration become low.
+
+#### Plot 3:
+
+```{r}
+p1 = ggplot()+geom_point(aes(x=cylinders , y = acceleration), data= bd)
+p2 = ggplot()+geom_point(aes(x=mpg , y = acceleration), data= bd)
+grid.newpage()
+vplayout = function(x,y)
+viewport(layout.pos.row = x, layout.pos.col = y)
+pushViewport(viewport(layout = grid.layout(1,2)))
+print(p1, vp = vplayout(1, 1))
+print(p2, vp = vplayout(1, 2))
+```
+From this plot we notice that vehicule with 4 cylinders have high acceleration than vehicles with 8 cylinders.
+and regarding mpg, we notice that vehiules with more mpg have high acceleration and those with low mpg have low accelaration.
+
+#### Plot 4:
+
+```{r}
+ggplot()+geom_boxplot(aes(x=origin, y = acceleration, col = origin),  data=bd)
+```
+
+Finally by considering the origin of the vehiccle, we notice that vehicule from US have a mean acceleration low than vehicule from UE or Japan. it's maybe related to some norme applied in US but not in other countries.
+
+
+# 3) Model Planning and building:
+
+The model we will use to figure out variables that influence acceleration is the linear model.
+we will first run a model with all variables inside and interpret the results.
+
+```{r}
+model = lm(acceleration ~., data = bd)
+summary(model) ## factor (origin) variable is not significant, cylinders and mpg eitheir
+```
+
+
+From the output of our regression, we notice that significant variables are : displacement, horsepower, weight and year.
+
+*displacement* is significant at a 5%, since it's p-value is less than 0.05 , an increase (decrease) of deplacement of on unit will decrease (increase) acceleration by 0.0081 .
+
+*horsepower* is significant at a 5% since it's p-value is less than 0.05 , an increase (decrease) of deplacement of on unit will decrease (increase) acceleration by 0.085 .
+
+*weight* is significant at a 5% since it's p-value is less than 0.05 , an increase (decrease) of deplacement of on unit will increase (decrease) acceleration by 0.003 .
+
+*year* is significant at a 10% since it's p-value is less than 0.1, an increase (decrease) of deplacement of on unit will decrease (increase) acceleration by 0.096 .
+
+The R squared is equal to 0.61, it means that 61% of variability of acceleration is explained by the independant variables.
+
+Since not all variables are significant, we will make a subselection of the best variables using regsubsets function.
+
+## Feature selection:
+```{r}
+models = regsubsets(acceleration~., data = bd, nvmax = 5)
+bss = summary(models)
+data.frame(
+  AdjR2 = which.max(bss$adjr2),
+  CP = which.min(bss$cp),
+  BIC = which.min(bss$bic)
+)
+```
+
+
+By the ajusted R squared and CP(Mallows Cp) criteria, 4 variables were retained, and by the BIC criteria 3 variables were retained.
+
+the variable retained taking R quared as criteria for selecting the best model among all models are :  displacement, horsepower, weight and year
+
+```{r}
+plot (models, scale="adjr2")
+
+
+the variable retained taking Cp as criteria for selecting the best model among all models are :  displacement, horsepower, weight and year
+
+```{r}
+plot (models, scale="Cp")
+```
+
+the variable retained taking BIC as criteria for selecting the best model among all models are :  displacement, horsepower and weight.
+
+```{r}
+plot (models, scale="bic")
+```
+
+
+so we will retain only variables selected by the BIC criteria, and we will fit a regression model and print the results.
+
+```{r}
+bd_retain = bd[,c("displacement","horsepower","weight","acceleration")]
+model2 = lm(acceleration ~. , data = bd_retain)
+summary(model2) ## good R squared , better than the one before
+```
+
+## Verifying the best model:
+
+The r-squared is the same as the r-squared of the full model(model with all variables).
+
+Let's make some tests to see if those selected are good or not .
+we will test in a first stage the null hypothesis of the null coefficient of mpg, cylinders, year and origin variables.
+```{r}
+linearHypothesis(model, c("mpg=0","cylinders=0","year=0",'origin2 =0',"origin3=0"))## P-value great than 5% we accept the hypothesis that we should
+# not include those variables in our model.
+```
+
+Since the p-value is greater than 5% , it means that the restricted model is better than the full model.
+
+a second test that gives the same results is the anova test.
+
+```{r}
+anova(model2,model) ## since P-value is bigger than 5% adding variables doesn't improve the model
+# that 's why we will retain the model with 3 variables displacement, horsepower and weight
+```
+We get the same conclusion as the previous one, the restricted model is better than the full model
+
+Now that we have selected the best variables that explain acceleration, let's verify the strongness of our model by verifying the 4 hypothesis related to the linear model.
+
+## Hypothesis of the linear model:
+
+### i) H1:Normality of residuals
+
+we should verify either the residus of the regression follow a normal distribution or not.
+
+```{r}
+plot(model2,2)
+```
+From this plot , we notice that not all observations are aligned to the dashed line, so we can suspect the validity of this hypothesis. To be sure of that we fit a shapiro test:
+
+```{r}
+shapiro.test(residuals(model2))
+```
+
+when the p-value is less that 5% we reject the hypothesis of normality of residues . the violation of this hypothesis is due to the restricted observations we have, and so this hypothesis will be respected if we add more and more variables to our data.
+
+### ii) H2: Homoscedasticity
+
+Homoscedasticity of errors is a fundamental assumption of the regression model, when this assumption is not verified the estimator of our regression is unbiased but is no longer minimum variance. To check if the residuals are of the same variance, we use the test of Breucsh-Pagan defines as follows:
+
+H0 : Residuals don’t have the same variance
+H1 : Residuals have the same variance
+
+for a p-value greater than 5% we accept H0, results of the test are:
+
+
+```{r}
+bptest(model2)
+```
+
+We notice from the result that the p-value of the test is greater than 5%, we deduce that the hypothesis of homoscedasticity of the variance is not respected.
+
+### iii) H3: Multicolinearity of variable
+
+The multi-col-linearity is a hypothesis to verify for a model of linear regression, a multi col-linearity means that among our exogenous, there is a linear relationship between one or more variables with the rest of the variables. To check for the existence or absence of multi-col-linearity, we calculate the VIF of each exogenous variable.
+
+For the case of a linear regression, we suspect the existence of multiple col-linearity when the VIF of the variable is greater than 10. The VIF variable table Exogenous is as follows:
+
+```{r}
+vif(model2)
+```
+
+since there is a high correlation between dosplacement and horsepower (0.9), vif of horsepower is greater than 10 and hence we can suspect existance of colinearity.
+
+
+### iv) H4: Exogeneity of variables
+
+We speak of exogeneity if the explanatory variables are not correlated with the residues, for this reason let us take the residues of our regression, and calculate its correlation with Exogenous variables.
+
+```{r}
+bd_retain$res = model2$residuals
+cor(bd_retain[,c("displacement", "horsepower","weight","res")])
+```
+
+
+We find that the correlation between residues and exogenous variables is almost zero, which validates the hypothesis of exogeneity of our model.
+
+## Plot of the prediction :
+
+```{r}
+bd_retain$accel_pred = predict(model2)
+
+p1=ggplot()+ geom_point(aes(x=displacement, y=acceleration), data= bd_retain)+
+  geom_line(aes(x=displacement, y=accel_pred, col="pred"), data = bd_retain)
+
+p2=ggplot()+ geom_point(aes(x=horsepower, y=acceleration), data= bd_retain)+
+  geom_line(aes(x=horsepower, y=accel_pred, col="pred"), data = bd_retain)
+
+p3=ggplot()+ geom_point(aes(x=weight, y=acceleration), data= bd_retain)+
+  geom_line(aes(x=weight, y=accel_pred, col="pred"), data = bd_retain)
+
+grid.newpage()
+vplayout = function(x,y)
+viewport(layout.pos.row = x, layout.pos.col = y)
+pushViewport(viewport(layout = grid.layout(1,3)))
+print(p1, vp = vplayout(1, 1))
+print(p2, vp = vplayout(1, 2))
+print(p3, vp = vplayout(1, 3))
+```
+
+
+# 4) Conclusion:
+
+As a conclusion we can say that among all the caracteristics related to vehicules present in the data set, only three caracteristics were retained to explaine acceleration ,those three caracteristics are displacement, horsepower and weight!.
+
+Those three caracteristics were retained using two different methods, the first method was the regsubsets which give us the best model within a criteria, and the second method was using hypothesis and testing wheter coefficient of other variable could be equal to zero or not.
+Both methods agreed that those three variables are the best to explain acceleration.
+
+The regression model we fitted can explain 61% of variability of acceleration which is somthing good, but the model sick to respect hypothesis related to regression model since 3 hypothesis are not respected among 4.
+
+For the first hypothesis *Normality of residuals* the solution is to increase number of variables
+For the second hypothesis *Homoscedastivity* , we can propose three solutions , the first one is scaling our data and then fitting the model, the second solution is instead of using acceleration we will use the logarithms of acceleration, the third solution is to combine the two previous solutions.
+For the third hypothesis *Multicolinearity* the solution is to delet displacement from the model since there is strong correlation between this variable and horsepower.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
